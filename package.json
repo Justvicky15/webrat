@@ -2,10 +2,9 @@
   "name": "webrat-remote-executor",
   "version": "1.0.0",
   "description": "Remote code execution web application",
-  "main": "index.js",
+  "main": "api/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
+    "start": "node api/index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
