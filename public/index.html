@@ -12,7 +12,7 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Courier New', monospace;
             background: #0a0a0a;
             color: #ffffff;
             height: 100vh;
@@ -24,69 +24,6 @@
             background: #1a1a1a;
             border-right: 1px solid #333;
             padding: 20px;
-            overflow-y: auto;
-        }
-        
-        .sidebar h2 {
-            color: #4a9eff;
-            margin-bottom: 20px;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-        }
-        
-        .sidebar h2::before {
-            content: "🖥️";
-            margin-right: 8px;
-        }
-        
-        .client {
-            background: #2a2a2a;
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
-        }
-        
-        .client:hover {
-            background: #3a3a3a;
-        }
-        
-        .client.selected {
-            border-color: #4a9eff;
-            background: #2a3a4a;
-        }
-        
-        .client-name {
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
-        
-        .client-info {
-            font-size: 12px;
-            color: #aaa;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .status {
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        
-        .status.online {
-            background: #22c55e;
-            color: white;
-        }
-        
-        .status.offline {
-            background: #ef4444;
-            color: white;
         }
         
         .main-content {
@@ -101,50 +38,42 @@
             border-bottom: 1px solid #333;
         }
         
-        .header h1 {
+        .title {
             color: #4a9eff;
+            font-size: 24px;
             margin-bottom: 10px;
-            display: flex;
-            align-items: center;
         }
         
-        .header h1::before {
-            content: "⚡";
-            margin-right: 10px;
-        }
-        
-        .selected-client {
-            color: #aaa;
-            font-size: 14px;
-        }
-        
-        .code-section {
+        .editor-container {
             flex: 1;
             display: flex;
             flex-direction: column;
         }
         
-        .code-editor {
-            flex: 1;
-            background: #000;
-            border: none;
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            padding: 20px;
-            resize: none;
-            outline: none;
+        .editor-header {
+            background: #1a1a1a;
+            padding: 10px 20px;
+            border-bottom: 1px solid #333;
             font-size: 14px;
-            line-height: 1.4;
+            color: #ccc;
         }
         
-        .code-editor::placeholder {
-            color: #555;
+        .editor {
+            flex: 1;
+            background: #000;
+            color: #00ff00;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: none;
+            outline: none;
+            resize: none;
         }
         
         .controls {
             background: #1a1a1a;
             padding: 15px 20px;
-            border-top: 1px solid #333;
+            border-bottom: 1px solid #333;
             display: flex;
             gap: 10px;
             align-items: center;
@@ -155,170 +84,285 @@
             color: white;
             border: none;
             padding: 10px 20px;
-            border-radius: 6px;
+            border-radius: 5px;
             cursor: pointer;
-            font-weight: bold;
-            transition: background 0.3s ease;
+            font-family: inherit;
+            font-size: 14px;
         }
         
         .btn:hover {
-            background: #3a8eef;
+            background: #357abd;
         }
         
         .btn:disabled {
-            background: #555;
+            background: #666;
             cursor: not-allowed;
         }
         
-        .output-section {
+        .btn-secondary {
+            background: #666;
+        }
+        
+        .btn-secondary:hover {
+            background: #777;
+        }
+        
+        .output-container {
             height: 300px;
-            background: #000;
-            border-top: 1px solid #333;
-            padding: 20px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .output-header {
+            background: #1a1a1a;
+            padding: 10px 20px;
+            border-bottom: 1px solid #333;
             font-size: 14px;
-            line-height: 1.4;
+            color: #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .output {
+            flex: 1;
+            background: #000;
             color: #00ff00;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-y: auto;
             white-space: pre-wrap;
         }
         
-        .error {
-            color: #ff4444;
+        .client-item {
+            background: #2a2a2a;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .client-item:hover {
+            background: #333;
+        }
+        
+        .client-item.selected {
+            border-color: #4a9eff;
+            background: #2a3a4a;
+        }
+        
+        .client-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .client-info {
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.online {
+            background: #22c55e;
+            color: white;
+        }
+        
+        .status.offline {
+            background: #ef4444;
+            color: white;
         }
         
         .loading {
             color: #4a9eff;
         }
         
-        .prompt {
-            color: #888;
-            margin-bottom: 10px;
+        .error {
+            color: #ef4444;
         }
         
         .status-bar {
             background: #1a1a1a;
-            padding: 8px 20px;
+            padding: 10px 20px;
             border-top: 1px solid #333;
             font-size: 12px;
-            color: #aaa;
+            color: #ccc;
             display: flex;
             justify-content: space-between;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #333;
+            border-top: 2px solid #4a9eff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <h2>Remote Clients</h2>
-        <div id="clientList"></div>
+        <h2 style="color: #4a9eff; margin-bottom: 20px;">🖥️ Remote Clients</h2>
+        <div id="clients-list">
+            <!-- Clients will be loaded here -->
+        </div>
     </div>
     
     <div class="main-content">
         <div class="header">
-            <h1>Remote Code Executor</h1>
-            <div class="selected-client" id="selectedClient">Select a client to execute commands</div>
+            <div class="title">⚡ Remote Code Executor</div>
+            <div id="connection-status" style="color: #ccc;">Loading clients...</div>
         </div>
         
-        <div class="code-section">
-            <textarea 
-                id="codeEditor" 
-                class="code-editor" 
-                placeholder="# Enter your commands here
+        <div class="editor-container">
+            <div class="editor-header">Command Input</div>
+            <textarea id="code-editor" class="editor" placeholder="# Enter your commands here
 # Examples:
 dir
 echo Hello World
 ipconfig
 systeminfo
 whoami
-ping google.com"
-            ></textarea>
+ping google.com">dir
+echo "Hello World"
+ipconfig
+systeminfo</textarea>
         </div>
         
         <div class="controls">
-            <button id="executeBtn" class="btn" disabled>Execute Commands</button>
-            <button id="clearBtn" class="btn" style="background: #666;">Clear</button>
-            <span id="status" style="margin-left: auto; color: #aaa;">Ready</span>
+            <button id="execute-btn" class="btn">Execute Commands (Ctrl+Enter)</button>
+            <button id="clear-editor-btn" class="btn btn-secondary">Clear Editor</button>
+            <button id="clear-output-btn" class="btn btn-secondary">Clear Output</button>
+            <div style="margin-left: auto; font-size: 14px;" id="status-text">Ready</div>
         </div>
         
-        <div class="output-section">
-            <div id="output">
-                <div class="prompt">C:\> Ready to execute commands...</div>
+        <div class="output-container">
+            <div class="output-header">
+                <span>Command Output</span>
+                <span id="execution-status"></span>
             </div>
+            <div id="output" class="output">C:\> Ready to execute commands...</div>
         </div>
         
         <div class="status-bar">
-            <span id="connectionStatus">Not connected</span>
-            <span id="execCount">Executions: 0</span>
+            <span id="client-status">No client selected</span>
+            <span id="exec-count">Executions: 0</span>
         </div>
     </div>
 
     <script>
+        let clients = [];
         let selectedClient = null;
+        let currentExecution = null;
+        let isExecuting = false;
         let execCount = 0;
-        
-        const clients = [
-            { id: 'client-1', name: 'Production Server', ip: '192.168.1.100', os: 'Windows Server 2019', status: 'online' },
-            { id: 'client-2', name: 'Development VM', ip: '192.168.1.101', os: 'Windows 11', status: 'online' },
-            { id: 'client-3', name: 'Testing Container', ip: '192.168.1.102', os: 'Ubuntu 22.04', status: 'online' },
-            { id: 'client-4', name: 'Staging Server', ip: '192.168.1.103', os: 'CentOS 8', status: 'offline' }
-        ];
-        
-        function renderClients() {
-            const clientList = document.getElementById('clientList');
-            clientList.innerHTML = clients.map(client => `
-                <div class="client ${selectedClient?.id === client.id ? 'selected' : ''}" 
-                     onclick="selectClient('${client.id}')">
-                    <div class="client-name">${client.name}</div>
-                    <div class="client-info">
-                        <span>${client.ip} • ${client.os}</span>
-                        <span class="status ${client.status}">${client.status.toUpperCase()}</span>
-                    </div>
-                </div>
-            `).join('');
-        }
-        
-        function selectClient(clientId) {
-            selectedClient = clients.find(c => c.id === clientId);
-            renderClients();
-            updateUI();
-        }
-        
-        function updateUI() {
-            const executeBtn = document.getElementById('executeBtn');
-            const selectedClientEl = document.getElementById('selectedClient');
-            const connectionStatus = document.getElementById('connectionStatus');
+
+        // Load clients on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadClients();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('execute-btn').addEventListener('click', executeCode);
+            document.getElementById('clear-editor-btn').addEventListener('click', () => {
+                document.getElementById('code-editor').value = '';
+            });
+            document.getElementById('clear-output-btn').addEventListener('click', () => {
+                document.getElementById('output').textContent = 'C:\\> Ready to execute commands...';
+            });
             
-            if (selectedClient) {
-                executeBtn.disabled = selectedClient.status !== 'online';
-                selectedClientEl.textContent = `Connected to: ${selectedClient.name} (${selectedClient.ip})`;
-                connectionStatus.textContent = `Connected to ${selectedClient.name}`;
-            } else {
-                executeBtn.disabled = true;
-                selectedClientEl.textContent = 'Select a client to execute commands';
-                connectionStatus.textContent = 'Not connected';
+            // Ctrl+Enter to execute
+            document.getElementById('code-editor').addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    executeCode();
+                }
+            });
+        }
+
+        async function loadClients() {
+            try {
+                const response = await fetch('/api/clients');
+                if (response.ok) {
+                    clients = await response.json();
+                    renderClients();
+                    
+                    // Auto-select first online client
+                    const firstOnline = clients.find(c => c.status === 'online');
+                    if (firstOnline) {
+                        selectClient(firstOnline);
+                    }
+                } else {
+                    document.getElementById('connection-status').textContent = 'Failed to load clients';
+                }
+            } catch (error) {
+                document.getElementById('connection-status').textContent = 'Connection error';
             }
         }
-        
-        async function executeCode() {
-            if (!selectedClient || selectedClient.status !== 'online') return;
+
+        function renderClients() {
+            const container = document.getElementById('clients-list');
+            container.innerHTML = '';
             
-            const code = document.getElementById('codeEditor').value.trim();
+            clients.forEach(client => {
+                const item = document.createElement('div');
+                item.className = 'client-item';
+                item.innerHTML = `
+                    <div class="client-name">
+                        ${client.name}
+                        <span class="status ${client.status}">${client.status.toUpperCase()}</span>
+                    </div>
+                    <div class="client-info">${client.ip} • ${client.os}</div>
+                `;
+                
+                item.addEventListener('click', () => selectClient(client));
+                container.appendChild(item);
+            });
+        }
+
+        function selectClient(client) {
+            selectedClient = client;
+            
+            // Update UI
+            document.querySelectorAll('.client-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            event.currentTarget?.classList.add('selected');
+            
+            document.getElementById('connection-status').textContent = `Connected to: ${client.name} (${client.ip})`;
+            document.getElementById('client-status').textContent = `Connected to ${client.name}`;
+            
+            // Enable/disable execute button
+            const executeBtn = document.getElementById('execute-btn');
+            executeBtn.disabled = client.status !== 'online';
+        }
+
+        async function executeCode() {
+            if (!selectedClient || isExecuting) return;
+            
+            const code = document.getElementById('code-editor').value.trim();
             if (!code) return;
             
-            const executeBtn = document.getElementById('executeBtn');
-            const status = document.getElementById('status');
-            const output = document.getElementById('output');
-            
-            executeBtn.disabled = true;
-            status.textContent = 'Executing...';
-            
-            // Show execution start
-            output.innerHTML += `<div class="prompt">C:\\> ${code.split('\\n')[0]}</div>`;
-            output.innerHTML += `<div class="loading">Executing command on ${selectedClient.name}...</div>`;
-            output.scrollTop = output.scrollHeight;
+            setExecuting(true);
             
             try {
                 const response = await fetch('/api/execute', {
@@ -331,87 +375,81 @@ ping google.com"
                     })
                 });
                 
-                const result = await response.json();
-                
                 if (response.ok) {
+                    const execution = await response.json();
+                    currentExecution = execution;
+                    
+                    // Show executing status
+                    document.getElementById('output').innerHTML = `<span class="loading">C:\\> Executing command on ${selectedClient.name}...\nPlease wait...</span>`;
+                    
                     // Poll for results
-                    await pollExecution(result.id);
+                    pollExecution(execution.id);
                 } else {
-                    throw new Error(result.message || 'Execution failed');
+                    throw new Error('Execution failed');
                 }
             } catch (error) {
-                output.innerHTML += `<div class="error">Error: ${error.message}</div>`;
-                output.scrollTop = output.scrollHeight;
-            } finally {
-                executeBtn.disabled = selectedClient?.status !== 'online';
-                status.textContent = 'Ready';
+                document.getElementById('output').innerHTML = `<span class="error">Error: ${error.message}</span>`;
+                setExecuting(false);
             }
         }
-        
+
         async function pollExecution(executionId) {
-            const output = document.getElementById('output');
-            
             try {
                 const response = await fetch(`/api/executions/${executionId}`);
-                const execution = await response.json();
-                
-                if (execution.status === 'completed') {
-                    output.innerHTML = output.innerHTML.replace('<div class="loading">Executing command on ' + selectedClient.name + '...</div>', '');
+                if (response.ok) {
+                    const execution = await response.json();
+                    currentExecution = execution;
                     
-                    if (execution.output) {
-                        output.innerHTML += `<div class="output">${execution.output}</div>`;
+                    if (execution.status === 'completed' || execution.status === 'failed') {
+                        displayResult(execution);
+                        setExecuting(false);
+                        execCount++;
+                        document.getElementById('exec-count').textContent = `Executions: ${execCount}`;
+                    } else if (execution.status === 'running') {
+                        setTimeout(() => pollExecution(executionId), 1000);
                     }
-                    
-                    if (execution.error) {
-                        output.innerHTML += `<div class="error">Error: ${execution.error}</div>`;
-                    }
-                    
-                    output.innerHTML += `<div class="prompt">C:\\> Command completed ${execution.runtime ? 'in ' + execution.runtime : ''}</div>`;
-                    output.scrollTop = output.scrollHeight;
-                    
-                    execCount++;
-                    document.getElementById('execCount').textContent = `Executions: ${execCount}`;
-                    
-                } else if (execution.status === 'running') {
-                    setTimeout(() => pollExecution(executionId), 1000);
-                } else if (execution.status === 'failed') {
-                    output.innerHTML = output.innerHTML.replace('<div class="loading">Executing command on ' + selectedClient.name + '...</div>', '');
-                    output.innerHTML += `<div class="error">Execution failed: ${execution.error || 'Unknown error'}</div>`;
-                    output.scrollTop = output.scrollHeight;
                 }
             } catch (error) {
-                output.innerHTML += `<div class="error">Error polling execution: ${error.message}</div>`;
-                output.scrollTop = output.scrollHeight;
+                document.getElementById('output').innerHTML = `<span class="error">Polling failed: ${error.message}</span>`;
+                setExecuting(false);
             }
         }
-        
-        function clearEditor() {
-            document.getElementById('codeEditor').value = '';
-        }
-        
-        function clearOutput() {
-            document.getElementById('output').innerHTML = '<div class="prompt">C:\\> Ready to execute commands...</div>';
-        }
-        
-        // Event listeners
-        document.getElementById('executeBtn').addEventListener('click', executeCode);
-        document.getElementById('clearBtn').addEventListener('click', clearEditor);
-        
-        // Keyboard shortcuts
-        document.getElementById('codeEditor').addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'Enter') {
-                executeCode();
+
+        function displayResult(execution) {
+            let output = `C:\\> ${execution.code.split('\\n')[0]}\n\n`;
+            
+            if (execution.output) {
+                output += execution.output + '\n\n';
             }
-        });
-        
-        // Initialize
-        renderClients();
-        updateUI();
-        
-        // Auto-select first online client
-        const firstOnlineClient = clients.find(c => c.status === 'online');
-        if (firstOnlineClient) {
-            selectClient(firstOnlineClient.id);
+            
+            if (execution.error) {
+                output += `Error: ${execution.error}\n\n`;
+            }
+            
+            output += `C:\\> Command ${execution.status}`;
+            if (execution.runtime) {
+                output += ` in ${execution.runtime}`;
+            }
+            
+            document.getElementById('output').textContent = output;
+        }
+
+        function setExecuting(executing) {
+            isExecuting = executing;
+            const executeBtn = document.getElementById('execute-btn');
+            const statusElement = document.getElementById('execution-status');
+            
+            if (executing) {
+                executeBtn.innerHTML = '<span class="spinner"></span>Executing...';
+                executeBtn.disabled = true;
+                document.getElementById('status-text').textContent = 'Executing...';
+                statusElement.innerHTML = '<span class="spinner"></span>Executing...';
+            } else {
+                executeBtn.innerHTML = 'Execute Commands (Ctrl+Enter)';
+                executeBtn.disabled = !selectedClient || selectedClient.status !== 'online';
+                document.getElementById('status-text').textContent = 'Ready';
+                statusElement.textContent = '';
+            }
         }
     </script>
 </body>
