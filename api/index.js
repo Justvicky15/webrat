@@ -1,8 +1,82 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const WebSocket = require('ws');
+const http = require('http');
 
 const app = express();
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// Store connected clients and their WebSocket connections
+const connectedClients = new Map();
+const clientSockets = new Map(); // clientId -> WebSocket
+
+// WebSocket connection handling
+wss.on('connection', (ws, req) => {
+    console.log('New WebSocket connection');
+    
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            
+            if (data.type === 'register') {
+                const clientId = data.clientId;
+                clientSockets.set(clientId, ws);
+                connectedClients.set(clientId, {
+                    ...data.clientInfo,
+                    id: clientId,
+                    status: 'online',
+                    lastSeen: new Date()
+                });
+                
+                console.log(`Client registered: ${clientId}`);
+                ws.send(JSON.stringify({
+                    type: 'registered',
+                    clientId: clientId,
+                    success: true
+                }));
+                
+                // Update clients list in main storage
+                clients.set(clientId, connectedClients.get(clientId));
+            }
+            
+            if (data.type === 'execution_result') {
+                const execution = executions.get(data.executionId);
+                if (execution) {
+                    execution.status = data.status;
+                    execution.output = data.output;
+                    execution.error = data.error;
+                    execution.runtime = data.runtime;
+                    console.log(`Execution ${data.executionId} completed`);
+                }
+            }
+            
+        } catch (error) {
+            console.error('WebSocket message error:', error);
+        }
+    });
+    
+    ws.on('close', () => {
+        // Find and remove disconnected client
+        for (const [clientId, socket] of clientSockets.entries()) {
+            if (socket === ws) {
+                clientSockets.delete(clientId);
+                if (connectedClients.has(clientId)) {
+                    const client = connectedClients.get(clientId);
+                    client.status = 'offline';
+                    clients.set(clientId, client);
+                }
+                console.log(`Client disconnected: ${clientId}`);
+                break;
+            }
+        }
+    });
+});
 
 // Middleware
 app.use(express.json());
@@ -160,14 +234,25 @@ app.post('/api/execute', (req, res) => {
     
     executions.set(executionId, execution);
     
-    // Simulate execution with delay
-    setTimeout(() => {
-        const result = simulateCommand(code, clientId);
-        execution.status = result.error ? 'failed' : 'completed';
-        execution.output = result.output;
-        execution.error = result.error;
-        execution.runtime = result.runtime;
-    }, 1000 + Math.random() * 2000);
+    // Try to send command to real client via WebSocket
+    const clientSocket = clientSockets.get(clientId);
+    if (clientSocket && clientSocket.readyState === WebSocket.OPEN) {
+        clientSocket.send(JSON.stringify({
+            type: 'execute',
+            executionId: executionId,
+            code: code,
+            language: language || 'cmd'
+        }));
+    } else {
+        // Fallback to simulation for mock clients
+        setTimeout(() => {
+            const result = simulateCommand(code, clientId);
+            execution.status = result.error ? 'failed' : 'completed';
+            execution.output = result.output;
+            execution.error = result.error;
+            execution.runtime = result.runtime;
+        }, 1000 + Math.random() * 2000);
+    }
     
     res.json(execution);
 });
@@ -180,466 +265,16 @@ app.get('/api/executions/:id', (req, res) => {
     res.json(execution);
 });
 
-// Serve static files for root path
+const path = require('path');
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve index.html for root path
 app.get('/', (req, res) => {
-    res.send(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Remote Code Executor</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Courier New', monospace;
-            background: #0a0a0a;
-            color: #ffffff;
-            height: 100vh;
-            display: flex;
-        }
-        
-        .sidebar {
-            width: 300px;
-            background: #1a1a1a;
-            border-right: 1px solid #333;
-            padding: 20px;
-        }
-        
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .header {
-            background: #1a1a1a;
-            padding: 20px;
-            border-bottom: 1px solid #333;
-        }
-        
-        .title {
-            color: #4a9eff;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        
-        .editor-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .editor-header {
-            background: #1a1a1a;
-            padding: 10px 20px;
-            border-bottom: 1px solid #333;
-            font-size: 14px;
-            color: #ccc;
-        }
-        
-        .editor {
-            flex: 1;
-            background: #000;
-            color: #00ff00;
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            border: none;
-            outline: none;
-            resize: none;
-        }
-        
-        .controls {
-            background: #1a1a1a;
-            padding: 15px 20px;
-            border-bottom: 1px solid #333;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .btn {
-            background: #4a9eff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 14px;
-        }
-        
-        .btn:hover {
-            background: #357abd;
-        }
-        
-        .btn:disabled {
-            background: #666;
-            cursor: not-allowed;
-        }
-        
-        .btn-secondary {
-            background: #666;
-        }
-        
-        .btn-secondary:hover {
-            background: #777;
-        }
-        
-        .output-container {
-            height: 300px;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .output-header {
-            background: #1a1a1a;
-            padding: 10px 20px;
-            border-bottom: 1px solid #333;
-            font-size: 14px;
-            color: #ccc;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .output {
-            flex: 1;
-            background: #000;
-            color: #00ff00;
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-        }
-        
-        .client-item {
-            background: #2a2a2a;
-            border: 2px solid transparent;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .client-item:hover {
-            background: #333;
-        }
-        
-        .client-item.selected {
-            border-color: #4a9eff;
-            background: #2a3a4a;
-        }
-        
-        .client-name {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .client-info {
-            font-size: 12px;
-            color: #ccc;
-        }
-        
-        .status {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: bold;
-            margin-left: 10px;
-        }
-        
-        .status.online {
-            background: #22c55e;
-            color: white;
-        }
-        
-        .status.offline {
-            background: #ef4444;
-            color: white;
-        }
-        
-        .loading {
-            color: #4a9eff;
-        }
-        
-        .error {
-            color: #ef4444;
-        }
-        
-        .status-bar {
-            background: #1a1a1a;
-            padding: 10px 20px;
-            border-top: 1px solid #333;
-            font-size: 12px;
-            color: #ccc;
-            display: flex;
-            justify-content: space-between;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #333;
-            border-top: 2px solid #4a9eff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 8px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body>
-    <div class="sidebar">
-        <h2 style="color: #4a9eff; margin-bottom: 20px;">🖥️ Remote Clients</h2>
-        <div id="clients-list">
-            <!-- Clients will be loaded here -->
-        </div>
-    </div>
-    
-    <div class="main-content">
-        <div class="header">
-            <div class="title">⚡ Remote Code Executor</div>
-            <div id="connection-status" style="color: #ccc;">Loading clients...</div>
-        </div>
-        
-        <div class="editor-container">
-            <div class="editor-header">Command Input</div>
-            <textarea id="code-editor" class="editor" placeholder="# Enter your commands here
-# Examples:
-dir
-echo Hello World
-ipconfig
-systeminfo
-whoami
-ping google.com">dir
-echo "Hello World"
-ipconfig
-systeminfo</textarea>
-        </div>
-        
-        <div class="controls">
-            <button id="execute-btn" class="btn">Execute Commands (Ctrl+Enter)</button>
-            <button id="clear-editor-btn" class="btn btn-secondary">Clear Editor</button>
-            <button id="clear-output-btn" class="btn btn-secondary">Clear Output</button>
-            <div style="margin-left: auto; font-size: 14px;" id="status-text">Ready</div>
-        </div>
-        
-        <div class="output-container">
-            <div class="output-header">
-                <span>Command Output</span>
-                <span id="execution-status"></span>
-            </div>
-            <div id="output" class="output">C:\\> Ready to execute commands...</div>
-        </div>
-        
-        <div class="status-bar">
-            <span id="client-status">No client selected</span>
-            <span id="exec-count">Executions: 0</span>
-        </div>
-    </div>
-
-    <script>
-        let clients = [];
-        let selectedClient = null;
-        let currentExecution = null;
-        let isExecuting = false;
-        let execCount = 0;
-
-        // Load clients on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadClients();
-            setupEventListeners();
-        });
-
-        function setupEventListeners() {
-            document.getElementById('execute-btn').addEventListener('click', executeCode);
-            document.getElementById('clear-editor-btn').addEventListener('click', () => {
-                document.getElementById('code-editor').value = '';
-            });
-            document.getElementById('clear-output-btn').addEventListener('click', () => {
-                document.getElementById('output').textContent = 'C:\\\\> Ready to execute commands...';
-            });
-            
-            // Ctrl+Enter to execute
-            document.getElementById('code-editor').addEventListener('keydown', function(e) {
-                if (e.ctrlKey && e.key === 'Enter') {
-                    executeCode();
-                }
-            });
-        }
-
-        async function loadClients() {
-            try {
-                const response = await fetch('/api/clients');
-                if (response.ok) {
-                    clients = await response.json();
-                    renderClients();
-                    
-                    // Auto-select first online client
-                    const firstOnline = clients.find(c => c.status === 'online');
-                    if (firstOnline) {
-                        selectClient(firstOnline);
-                    }
-                } else {
-                    document.getElementById('connection-status').textContent = 'Failed to load clients';
-                }
-            } catch (error) {
-                document.getElementById('connection-status').textContent = 'Connection error';
-            }
-        }
-
-        function renderClients() {
-            const container = document.getElementById('clients-list');
-            container.innerHTML = '';
-            
-            clients.forEach(client => {
-                const item = document.createElement('div');
-                item.className = 'client-item';
-                item.innerHTML = \`
-                    <div class="client-name">
-                        \${client.name}
-                        <span class="status \${client.status}">\${client.status.toUpperCase()}</span>
-                    </div>
-                    <div class="client-info">\${client.ip} • \${client.os}</div>
-                \`;
-                
-                item.addEventListener('click', () => selectClient(client));
-                container.appendChild(item);
-            });
-        }
-
-        function selectClient(client) {
-            selectedClient = client;
-            
-            // Update UI
-            document.querySelectorAll('.client-item').forEach(item => {
-                item.classList.remove('selected');
-            });
-            
-            event.currentTarget?.classList.add('selected');
-            
-            document.getElementById('connection-status').textContent = \`Connected to: \${client.name} (\${client.ip})\`;
-            document.getElementById('client-status').textContent = \`Connected to \${client.name}\`;
-            
-            // Enable/disable execute button
-            const executeBtn = document.getElementById('execute-btn');
-            executeBtn.disabled = client.status !== 'online';
-        }
-
-        async function executeCode() {
-            if (!selectedClient || isExecuting) return;
-            
-            const code = document.getElementById('code-editor').value.trim();
-            if (!code) return;
-            
-            setExecuting(true);
-            
-            try {
-                const response = await fetch('/api/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        clientId: selectedClient.id,
-                        language: 'cmd',
-                        code: code
-                    })
-                });
-                
-                if (response.ok) {
-                    const execution = await response.json();
-                    currentExecution = execution;
-                    
-                    // Show executing status
-                    document.getElementById('output').innerHTML = \`<span class="loading">C:\\\\> Executing command on \${selectedClient.name}...\\nPlease wait...</span>\`;
-                    
-                    // Poll for results
-                    pollExecution(execution.id);
-                } else {
-                    throw new Error('Execution failed');
-                }
-            } catch (error) {
-                document.getElementById('output').innerHTML = \`<span class="error">Error: \${error.message}</span>\`;
-                setExecuting(false);
-            }
-        }
-
-        async function pollExecution(executionId) {
-            try {
-                const response = await fetch(\`/api/executions/\${executionId}\`);
-                if (response.ok) {
-                    const execution = await response.json();
-                    currentExecution = execution;
-                    
-                    if (execution.status === 'completed' || execution.status === 'failed') {
-                        displayResult(execution);
-                        setExecuting(false);
-                        execCount++;
-                        document.getElementById('exec-count').textContent = \`Executions: \${execCount}\`;
-                    } else if (execution.status === 'running') {
-                        setTimeout(() => pollExecution(executionId), 1000);
-                    }
-                }
-            } catch (error) {
-                document.getElementById('output').innerHTML = \`<span class="error">Polling failed: \${error.message}</span>\`;
-                setExecuting(false);
-            }
-        }
-
-        function displayResult(execution) {
-            let output = \`C:\\\\> \${execution.code.split('\\n')[0]}\\n\\n\`;
-            
-            if (execution.output) {
-                output += execution.output + '\\n\\n';
-            }
-            
-            if (execution.error) {
-                output += \`Error: \${execution.error}\\n\\n\`;
-            }
-            
-            output += \`C:\\\\> Command \${execution.status}\`;
-            if (execution.runtime) {
-                output += \` in \${execution.runtime}\`;
-            }
-            
-            document.getElementById('output').textContent = output;
-        }
-
-        function setExecuting(executing) {
-            isExecuting = executing;
-            const executeBtn = document.getElementById('execute-btn');
-            const statusElement = document.getElementById('execution-status');
-            
-            if (executing) {
-                executeBtn.innerHTML = '<span class="spinner"></span>Executing...';
-                executeBtn.disabled = true;
-                document.getElementById('status-text').textContent = 'Executing...';
-                statusElement.innerHTML = '<span class="spinner"></span>Executing...';
-            } else {
-                executeBtn.innerHTML = 'Execute Commands (Ctrl+Enter)';
-                executeBtn.disabled = !selectedClient || selectedClient.status !== 'online';
-                document.getElementById('status-text').textContent = 'Ready';
-                statusElement.textContent = '';
-            }
-        }
-    </script>
-</body>
-</html>
-    `);
+    res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// Export both app and server for Vercel
 module.exports = app;
+module.exports.server = server;
