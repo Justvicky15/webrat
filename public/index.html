@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Code Executor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .sidebar h2 {
+            color: #4a9eff;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar h2::before {
+            content: "🖥️";
+            margin-right: 8px;
+        }
+        
+        .client {
+            background: #2a2a2a;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .client:hover {
+            background: #3a3a3a;
+        }
+        
+        .client.selected {
+            border-color: #4a9eff;
+            background: #2a3a4a;
+        }
+        
+        .client-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .client-info {
+            font-size: 12px;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .status.online {
+            background: #22c55e;
+            color: white;
+        }
+        
+        .status.offline {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #1a1a1a;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .header h1 {
+            color: #4a9eff;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header h1::before {
+            content: "⚡";
+            margin-right: 10px;
+        }
+        
+        .selected-client {
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        .code-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .code-editor {
+            flex: 1;
+            background: #000;
+            border: none;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            resize: none;
+            outline: none;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .code-editor::placeholder {
+            color: #555;
+        }
+        
+        .controls {
+            background: #1a1a1a;
+            padding: 15px 20px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .btn {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #3a8eef;
+        }
+        
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        
+        .output-section {
+            height: 300px;
+            background: #000;
+            border-top: 1px solid #333;
+            padding: 20px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .output {
+            color: #00ff00;
+            white-space: pre-wrap;
+        }
+        
+        .error {
+            color: #ff4444;
+        }
+        
+        .loading {
+            color: #4a9eff;
+        }
+        
+        .prompt {
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .status-bar {
+            background: #1a1a1a;
+            padding: 8px 20px;
+            border-top: 1px solid #333;
+            font-size: 12px;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Remote Clients</h2>
+        <div id="clientList"></div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>Remote Code Executor</h1>
+            <div class="selected-client" id="selectedClient">Select a client to execute commands</div>
+        </div>
+        
+        <div class="code-section">
+            <textarea 
+                id="codeEditor" 
+                class="code-editor" 
+                placeholder="# Enter your commands here
+# Examples:
+dir
+echo Hello World
+ipconfig
+systeminfo
+whoami
+ping google.com"
+            ></textarea>
+        </div>
+        
+        <div class="controls">
+            <button id="executeBtn" class="btn" disabled>Execute Commands</button>
+            <button id="clearBtn" class="btn" style="background: #666;">Clear</button>
+            <span id="status" style="margin-left: auto; color: #aaa;">Ready</span>
+        </div>
+        
+        <div class="output-section">
+            <div id="output">
+                <div class="prompt">C:\> Ready to execute commands...</div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <span id="connectionStatus">Not connected</span>
+            <span id="execCount">Executions: 0</span>
+        </div>
+    </div>
+
+    <script>
+        let selectedClient = null;
+        let execCount = 0;
+        
+        const clients = [
+            { id: 'client-1', name: 'Production Server', ip: '192.168.1.100', os: 'Windows Server 2019', status: 'online' },
+            { id: 'client-2', name: 'Development VM', ip: '192.168.1.101', os: 'Windows 11', status: 'online' },
+            { id: 'client-3', name: 'Testing Container', ip: '192.168.1.102', os: 'Ubuntu 22.04', status: 'online' },
+            { id: 'client-4', name: 'Staging Server', ip: '192.168.1.103', os: 'CentOS 8', status: 'offline' }
+        ];
+        
+        function renderClients() {
+            const clientList = document.getElementById('clientList');
+            clientList.innerHTML = clients.map(client => `
+                <div class="client ${selectedClient?.id === client.id ? 'selected' : ''}" 
+                     onclick="selectClient('${client.id}')">
+                    <div class="client-name">${client.name}</div>
+                    <div class="client-info">
+                        <span>${client.ip} • ${client.os}</span>
+                        <span class="status ${client.status}">${client.status.toUpperCase()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function selectClient(clientId) {
+            selectedClient = clients.find(c => c.id === clientId);
+            renderClients();
+            updateUI();
+        }
+        
+        function updateUI() {
+            const executeBtn = document.getElementById('executeBtn');
+            const selectedClientEl = document.getElementById('selectedClient');
+            const connectionStatus = document.getElementById('connectionStatus');
+            
+            if (selectedClient) {
+                executeBtn.disabled = selectedClient.status !== 'online';
+                selectedClientEl.textContent = `Connected to: ${selectedClient.name} (${selectedClient.ip})`;
+                connectionStatus.textContent = `Connected to ${selectedClient.name}`;
+            } else {
+                executeBtn.disabled = true;
+                selectedClientEl.textContent = 'Select a client to execute commands';
+                connectionStatus.textContent = 'Not connected';
+            }
+        }
+        
+        async function executeCode() {
+            if (!selectedClient || selectedClient.status !== 'online') return;
+            
+            const code = document.getElementById('codeEditor').value.trim();
+            if (!code) return;
+            
+            const executeBtn = document.getElementById('executeBtn');
+            const status = document.getElementById('status');
+            const output = document.getElementById('output');
+            
+            executeBtn.disabled = true;
+            status.textContent = 'Executing...';
+            
+            // Show execution start
+            output.innerHTML += `<div class="prompt">C:\\> ${code.split('\\n')[0]}</div>`;
+            output.innerHTML += `<div class="loading">Executing command on ${selectedClient.name}...</div>`;
+            output.scrollTop = output.scrollHeight;
+            
+            try {
+                const response = await fetch('/api/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clientId: selectedClient.id,
+                        language: 'cmd',
+                        code: code
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Poll for results
+                    await pollExecution(result.id);
+                } else {
+                    throw new Error(result.message || 'Execution failed');
+                }
+            } catch (error) {
+                output.innerHTML += `<div class="error">Error: ${error.message}</div>`;
+                output.scrollTop = output.scrollHeight;
+            } finally {
+                executeBtn.disabled = selectedClient?.status !== 'online';
+                status.textContent = 'Ready';
+            }
+        }
+        
+        async function pollExecution(executionId) {
+            const output = document.getElementById('output');
+            
+            try {
+                const response = await fetch(`/api/executions/${executionId}`);
+                const execution = await response.json();
+                
+                if (execution.status === 'completed') {
+                    output.innerHTML = output.innerHTML.replace('<div class="loading">Executing command on ' + selectedClient.name + '...</div>', '');
+                    
+                    if (execution.output) {
+                        output.innerHTML += `<div class="output">${execution.output}</div>`;
+                    }
+                    
+                    if (execution.error) {
+                        output.innerHTML += `<div class="error">Error: ${execution.error}</div>`;
+                    }
+                    
+                    output.innerHTML += `<div class="prompt">C:\\> Command completed ${execution.runtime ? 'in ' + execution.runtime : ''}</div>`;
+                    output.scrollTop = output.scrollHeight;
+                    
+                    execCount++;
+                    document.getElementById('execCount').textContent = `Executions: ${execCount}`;
+                    
+                } else if (execution.status === 'running') {
+                    setTimeout(() => pollExecution(executionId), 1000);
+                } else if (execution.status === 'failed') {
+                    output.innerHTML = output.innerHTML.replace('<div class="loading">Executing command on ' + selectedClient.name + '...</div>', '');
+                    output.innerHTML += `<div class="error">Execution failed: ${execution.error || 'Unknown error'}</div>`;
+                    output.scrollTop = output.scrollHeight;
+                }
+            } catch (error) {
+                output.innerHTML += `<div class="error">Error polling execution: ${error.message}</div>`;
+                output.scrollTop = output.scrollHeight;
+            }
+        }
+        
+        function clearEditor() {
+            document.getElementById('codeEditor').value = '';
+        }
+        
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '<div class="prompt">C:\\> Ready to execute commands...</div>';
+        }
+        
+        // Event listeners
+        document.getElementById('executeBtn').addEventListener('click', executeCode);
+        document.getElementById('clearBtn').addEventListener('click', clearEditor);
+        
+        // Keyboard shortcuts
+        document.getElementById('codeEditor').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                executeCode();
+            }
+        });
+        
+        // Initialize
+        renderClients();
+        updateUI();
+        
+        // Auto-select first online client
+        const firstOnlineClient = clients.find(c => c.status === 'online');
+        if (firstOnlineClient) {
+            selectClient(firstOnlineClient.id);
+        }
+    </script>
+</body>
+</html>
