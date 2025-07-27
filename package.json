@@ -1,32 +1,17 @@
 {
-  "name": "remote-code-executor",
+  "name": "webrat-remote-executor",
   "version": "1.0.0",
-  "description": "Remote code execution web application for Vercel deployment",
-  "main": "server.js",
+  "description": "Remote code execution web application",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
-  "keywords": [
-    "remote",
-    "code",
-    "execution", 
-    "vercel",
-    "terminal",
-    "command"
-  ],
-  "author": "WebRAT",
-  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "uuid": "^9.0.1"
   },
   "engines": {
-    "node": ">=16.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/webrat/remote-code-executor.git"
-  },
-  "homepage": "https://webrat.vercel.app"
+    "node": "18.x"
+  }
 }
