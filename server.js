@@ -1,6 +1,6 @@
 const express = require('express');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,132 +9,37 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
-// In-memory storage for simplicity
+// CORS middleware
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
+
+// In-memory storage
 const clients = new Map([
-    ['client-1', {
-        id: 'client-1',
-        name: 'Production Server',
-        ip: '192.168.1.100',
-        os: 'Windows Server 2019',
-        status: 'online',
-        lastSeen: new Date()
-    }],
-    ['client-2', {
-        id: 'client-2',
-        name: 'Development VM',
-        ip: '192.168.1.101',
-        os: 'Windows 11',
-        status: 'online',
-        lastSeen: new Date()
-    }],
-    ['client-3', {
-        id: 'client-3',
-        name: 'Testing Container',
-        ip: '192.168.1.102',
-        os: 'Ubuntu 22.04',
-        status: 'online',
-        lastSeen: new Date()
-    }],
-    ['client-4', {
-        id: 'client-4',
-        name: 'Staging Server',
-        ip: '192.168.1.103',
-        os: 'CentOS 8',
-        status: 'offline',
-        lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000)
-    }]
+    ['client-1', { id: 'client-1', name: 'Production Server', ip: '192.168.1.100', os: 'Windows Server 2019', status: 'online', lastSeen: new Date() }],
+    ['client-2', { id: 'client-2', name: 'Development VM', ip: '192.168.1.101', os: 'Windows 11', status: 'online', lastSeen: new Date() }],
+    ['client-3', { id: 'client-3', name: 'Testing Container', ip: '192.168.1.102', os: 'Ubuntu 22.04', status: 'online', lastSeen: new Date() }],
+    ['client-4', { id: 'client-4', name: 'Staging Server', ip: '192.168.1.103', os: 'CentOS 8', status: 'offline', lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000) }]
 ]);
 
 const executions = new Map();
 
-// API Routes
-
-// Get all clients
-app.get('/api/clients', (req, res) => {
-    const clientList = Array.from(clients.values());
-    res.json(clientList);
-});
-
-// Get client by ID
-app.get('/api/clients/:id', (req, res) => {
-    const client = clients.get(req.params.id);
-    if (!client) {
-        return res.status(404).json({ message: 'Client not found' });
-    }
-    res.json(client);
-});
-
-// Execute code on client
-app.post('/api/execute', (req, res) => {
-    const { clientId, language, code } = req.body;
-    
-    if (!clientId || !code) {
-        return res.status(400).json({ message: 'Client ID and code are required' });
-    }
-    
-    const client = clients.get(clientId);
-    if (!client) {
-        return res.status(404).json({ message: 'Client not found' });
-    }
-    
-    if (client.status !== 'online') {
-        return res.status(400).json({ message: 'Client is not online' });
-    }
-    
-    const executionId = uuidv4();
-    const execution = {
-        id: executionId,
-        clientId,
-        language: language || 'cmd',
-        code,
-        status: 'running',
-        output: null,
-        error: null,
-        runtime: null,
-        executedAt: new Date()
-    };
-    
-    executions.set(executionId, execution);
-    
-    // Simulate code execution with delay
-    setTimeout(() => {
-        const mockResult = simulateCodeExecution(code, client.os);
-        execution.status = mockResult.error ? 'failed' : 'completed';
-        execution.output = mockResult.output;
-        execution.error = mockResult.error;
-        execution.runtime = mockResult.runtime;
-    }, 1000 + Math.random() * 2000); // 1-3 seconds delay
-    
-    res.json(execution);
-});
-
-// Get execution by ID
-app.get('/api/executions/:id', (req, res) => {
-    const execution = executions.get(req.params.id);
-    if (!execution) {
-        return res.status(404).json({ message: 'Execution not found' });
-    }
-    res.json(execution);
-});
-
-// Simulate code execution
-function simulateCodeExecution(code, clientOS) {
+// Mock command simulation
+function simulateCommand(code, clientId) {
     const startTime = Date.now();
     const commands = code.toLowerCase().split('\n').filter(cmd => cmd.trim());
     
-    // Check for error conditions
-    if (code.includes('error') || code.includes('fail')) {
-        return {
-            output: '',
-            error: 'Command execution failed',
-            runtime: `${(Date.now() - startTime) / 1000}s`
-        };
-    }
-    
     let output = '';
     
-    // Generate realistic output based on commands
-    commands.forEach((command, index) => {
+    commands.forEach((command) => {
         const cmd = command.trim();
         
         if (cmd.startsWith('dir') || cmd.startsWith('ls')) {
@@ -161,8 +66,9 @@ function simulateCodeExecution(code, clientOS) {
             output += `   Default Gateway . . . . . . . . . : 192.168.1.1\n\n`;
             
         } else if (cmd.includes('systeminfo')) {
-            output += `Host Name:                 ${clients.get('client-1')?.name || 'SERVER-01'}\n`;
-            output += `OS Name:                   ${clientOS}\n`;
+            const client = clients.get(clientId);
+            output += `Host Name:                 ${client?.name.replace(/\s+/g, '-').toUpperCase() || 'SERVER-01'}\n`;
+            output += `OS Name:                   Windows Server 2019\n`;
             output += `OS Version:                10.0.17763 N/A Build 17763\n`;
             output += `System Type:               x64-based PC\n`;
             output += `Total Physical Memory:     8,192 MB\n`;
@@ -202,22 +108,90 @@ function simulateCodeExecution(code, clientOS) {
         }
     });
     
+    const runtime = ((Date.now() - startTime) + Math.random() * 1000) / 1000;
+    
     return {
         output: output.trim(),
-        error: null,
-        runtime: `${((Date.now() - startTime) + Math.random() * 1000) / 1000}s`
+        error: code.includes('error') ? 'Command execution failed' : null,
+        runtime: `${runtime.toFixed(2)}s`
     };
 }
 
-// Serve the main page
+// API Routes
+app.get('/api/clients', (req, res) => {
+    const clientArray = Array.from(clients.values());
+    res.json(clientArray);
+});
+
+app.get('/api/clients/:id', (req, res) => {
+    const client = clients.get(req.params.id);
+    if (!client) {
+        return res.status(404).json({ message: 'Client not found' });
+    }
+    res.json(client);
+});
+
+app.post('/api/execute', (req, res) => {
+    const { clientId, language, code } = req.body;
+    
+    if (!clientId || !code) {
+        return res.status(400).json({ message: 'Client ID and code are required' });
+    }
+    
+    const client = clients.get(clientId);
+    if (!client) {
+        return res.status(404).json({ message: 'Client not found' });
+    }
+    
+    if (client.status !== 'online') {
+        return res.status(400).json({ message: 'Client is not online' });
+    }
+    
+    const executionId = uuidv4();
+    const execution = {
+        id: executionId,
+        clientId,
+        language: language || 'cmd',
+        code,
+        status: 'running',
+        output: null,
+        error: null,
+        runtime: null,
+        executedAt: new Date().toISOString()
+    };
+    
+    executions.set(executionId, execution);
+    
+    // Simulate execution with delay
+    setTimeout(() => {
+        const result = simulateCommand(code, clientId);
+        execution.status = result.error ? 'failed' : 'completed';
+        execution.output = result.output;
+        execution.error = result.error;
+        execution.runtime = result.runtime;
+    }, 1000 + Math.random() * 2000);
+    
+    res.json(execution);
+});
+
+app.get('/api/executions/:id', (req, res) => {
+    const execution = executions.get(req.params.id);
+    if (!execution) {
+        return res.status(404).json({ message: 'Execution not found' });
+    }
+    res.json(execution);
+});
+
+// Serve static files
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Visit: http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Remote Code Executor running on port ${PORT}`);
+    console.log(`🌐 Access at: http://localhost:${PORT}`);
+    console.log(`📝 Ready for client connections`);
 });
 
 module.exports = app;
