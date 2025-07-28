@@ -40,7 +40,12 @@ app.use(helmet({
 
 app.use(limiter);
 app.use(cors({
-  origin: ['https://webrat.vercel.app', 'http://localhost:5000'],
+  origin: [
+    'https://webrat.vercel.app', 
+    'http://localhost:5000',
+    /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel preview deployments
+    /^http:\/\/localhost:\d+$/ // Allow any localhost port
+  ],
   credentials: true
 }));
 
@@ -119,6 +124,10 @@ function handleWebSocketMessage(ws, data, clientIP) {
     case 'register':
       registerDevice(ws, data, clientIP);
       break;
+    case 'register_controller':
+      // Register web interface as controller
+      console.log('Controller registered from', clientIP);
+      break;
     case 'heartbeat':
       updateDeviceHeartbeat(data.deviceId);
       break;
@@ -137,27 +146,36 @@ function registerDevice(ws, data, clientIP) {
   const deviceId = data.deviceId || generateDeviceId();
   const device = {
     id: deviceId,
-    name: data.deviceInfo?.model || data.name || 'Unknown Device',
-    type: data.clientType || 'unknown',
+    name: data.name || data.deviceInfo?.model || 'Unknown Device',
+    type: data.clientType || 'pc',
     ip: clientIP,
     osInfo: data.deviceInfo || {},
     deviceType: data.clientType === 'mobile' ? 'mobile' : 'pc',
-    status: 'online',
+    status: 'connected',
     lastSeen: Date.now(),
-    ws: ws
+    ws: ws,
+    capabilities: data.capabilities || {}
   };
   
   connectedDevices.set(deviceId, device);
   broadcastDeviceList();
   
-  console.log(`Device registered: ${device.name} (${device.type})`);
+  console.log(`Device registered: ${device.name} (${device.type}) from ${clientIP}`);
+  
+  // Send registration confirmation
+  ws.send(JSON.stringify({
+    type: 'registration_confirmed',
+    deviceId: deviceId,
+    status: 'success'
+  }));
 }
 
 function updateDeviceHeartbeat(deviceId) {
   const device = connectedDevices.get(deviceId);
   if (device) {
     device.lastSeen = Date.now();
-    device.status = 'online';
+    device.status = 'connected';
+    broadcastDeviceList();
   }
 }
 
